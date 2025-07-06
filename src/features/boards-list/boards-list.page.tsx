@@ -1,24 +1,24 @@
-import { rqClient } from "@/shared/api/instance";
-import { CONFIG } from "@/shared/model/config";
-import { ROUTES } from "@/shared/model/routes";
-import { Button } from "@/shared/ui/kit/button";
-import { Card, CardFooter, CardHeader } from "@/shared/ui/kit/card";
-import { useQueryClient } from "@tanstack/react-query";
-import { href, Link } from "react-router-dom";
+import { rqClient } from '@/shared/api/instance';
+import { CONFIG } from '@/shared/model/config';
+import { ROUTES } from '@/shared/model/routes';
+import { Button } from '@/shared/ui/kit/button';
+import { Card, CardFooter, CardHeader } from '@/shared/ui/kit/card';
+import { useQueryClient } from '@tanstack/react-query';
+import { href, Link } from 'react-router-dom';
 
 function BoardsListPage() {
   const queryClient = useQueryClient();
   console.log(CONFIG.API_BASE_URL);
-  const boardQuery = rqClient.useQuery("get", "/boards");
+  const boardQuery = rqClient.useQuery('get', '/boards');
   // const createBoardMutation = rqClient.useMutation("post", "/boards");
   const deleteBoardMutation = rqClient.useMutation(
-    "delete",
-    "/boards/{boardId}",
+    'delete',
+    '/boards/{boardId}',
     {
       onSettled: async () => {
-        await queryClient.invalidateQueries({ queryKey: ["get", "/boards"] });
+        await queryClient.invalidateQueries({ queryKey: ['get', '/boards'] });
       },
-    }
+    },
   );
   return (
     <div className="container mx-auto p-4">
