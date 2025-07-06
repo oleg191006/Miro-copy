@@ -1,6 +1,11 @@
 import type { ApiSchemas } from '../../schema';
 import { http } from '../http';
-import { HttpResponse } from 'msw';
+import { delay, HttpResponse } from 'msw';
+import {
+  createRefreshTokenCookie,
+  generateTokens,
+  verifyToken,
+} from '../session';
 
 const userPasswords = new Map<string, string>();
 const mockUsers: ApiSchemas['User'][] = [
@@ -11,8 +16,6 @@ const mockUsers: ApiSchemas['User'][] = [
 ];
 
 userPasswords.set('admin@gmail.com', '123456789');
-
-const mockTokens = new Map<string, string>();
 
 export const authHandlers = [
   http.post('/auth/login', async ({ request }) => {
@@ -31,13 +34,21 @@ export const authHandlers = [
       );
     }
 
-    const token = `mock-token-${Date.now()}`;
+    const { accessToken, refreshToken } = await generateTokens({
+      userId: user.id,
+      email: user.email,
+    });
     return HttpResponse.json(
       {
-        accessToken: token,
+        accessToken: accessToken,
         user,
       },
-      { status: 200 },
+      {
+        status: 20,
+        headers: {
+          'Set-Coockie': createRefreshTokenCookie(refreshToken),
+        },
+      },
     );
   }),
 
@@ -47,29 +58,88 @@ export const authHandlers = [
     if (mockUsers.some((u) => u.email === body.email)) {
       return HttpResponse.json(
         {
-          message: 'Пользователь уже существует',
+          message: 'The user already exists',
           code: 'USER_EXISTS',
         },
         { status: 400 },
       );
     }
 
+    await delay();
+
     const newUser: ApiSchemas['User'] = {
       id: String(mockUsers.length + 1),
       email: body.email,
     };
+    const { accessToken, refreshToken } = await generateTokens({
+      userId: newUser.id,
+      email: newUser.email,
+    });
 
-    const token = `mock-token-${Date.now()}`;
     mockUsers.push(newUser);
     userPasswords.set(body.email, body.password);
-    mockTokens.set(body.email, token);
 
     return HttpResponse.json(
       {
-        accessToken: token,
+        accessToken: accessToken,
         user: newUser,
       },
-      { status: 201 },
+      {
+        status: 201,
+        headers: {
+          'Set-Coockie': createRefreshTokenCookie(refreshToken),
+        },
+      },
     );
+  }),
+  http.post('/auth/refresh', async ({ cookies }) => {
+    const refreshToken = cookies.refreshToken;
+
+    if (!refreshToken) {
+      return HttpResponse.json(
+        {
+          message: 'Refresh token not found',
+          code: 'REFRESH_TOKEN_MISSING',
+        },
+        { status: 401 },
+      );
+    }
+
+    try {
+      const session = await verifyToken(refreshToken);
+      const user = mockUsers.find((u) => u.id === session.userId);
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const { accessToken, refreshToken: newRefreshToken } =
+        await generateTokens({
+          userId: user.id,
+          email: user.email,
+        });
+
+      return HttpResponse.json(
+        {
+          accessToken,
+          user,
+        },
+        {
+          status: 200,
+          headers: {
+            'Set-Cookie': createRefreshTokenCookie(newRefreshToken),
+          },
+        },
+      );
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      return HttpResponse.json(
+        {
+          message: 'Invalid refresh token',
+          code: 'INVALID_REFRESH_TOKEN',
+        },
+        { status: 401 },
+      );
+    }
   }),
 ];
